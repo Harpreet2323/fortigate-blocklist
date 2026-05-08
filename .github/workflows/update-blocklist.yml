@@ -5,9 +5,6 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   update-blocklist:
     runs-on: ubuntu-latest
@@ -15,34 +12,34 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Create parser script
+      - name: Build blocklist
         run: |
-          cat > parse_hashes.py << 'PYEOF'
-          import sys, json
-          try:
-              data = json.load(sys.stdin)
-              if data.get('query_status') == 'ok':
-                  for item in data.get('data', []):
-                      h = item.get('md5_hash', '').strip()
-                      if len(h) == 32:
-                          print(h)
-          except Exception as e:
-              print('# ERROR: ' + str(e))
-          PYEOF
+          echo "# FortiGate External Malware Block List" > malware-blocklist.txt
+          echo "# Source: abuse.ch MalwareBazaar" >> malware-blocklist.txt
+          echo "# Updated: $(date -u)" >> malware-blocklist.txt
+          echo "" >> malware-blocklist.txt
+          curl -s -X POST https://mb-api.abuse.ch/api/v1/ \
+            -d "query=get_recent&selector=time" \
+            -o response.json
+          python3 -c "
+import json
+with open('response.json') as f:
+    data = json.load(f)
+if data.get('query_status') == 'ok':
+    with open('malware-blocklist.txt', 'a') as out:
+        for item in data.get('data', []):
+            h = item.get('md5_hash','').strip()
+            if len(h) == 32:
+                out.write(h + '\n')
+"
+          wc -l malware-blocklist.txt
 
-      - name: Download abuse.ch MD5 hashes
+      - name: Commit changes
         run: |
-          {
-            echo "# ============================================"
-            echo "# FortiGate External Malware Block List"
-            echo "# Source: abuse.ch MalwareBazaar"
-            echo "# Maintained by: Harpreet2323"
-            echo "# Updated: $(date -u '+%Y-%m-%d %H:%M UTC')"
-            echo "# ============================================"
-            echo ""
-            curl -s --max-time 60 --retry 3 \
-              -X POST \
-              -H "Content
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add malware-blocklist.txt
+          git diff --staged --quiet || git commit -m "Auto-update $(date -u)"
+          git push
