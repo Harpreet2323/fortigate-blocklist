@@ -28,13 +28,34 @@ jobs:
             echo "# Updated: $(date -u '+%Y-%m-%d %H:%M UTC')"
             echo "# ============================================"
             echo ""
-            curl -s --max-time 30 https://bazaar.abuse.ch/export/txt/md5/recent/ | \
-            grep -E '^[a-fA-F0-9]{32}$' || true
+
+            curl -s --max-time 60 \
+              --retry 3 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "query=get_recent&selector=time" \
+              https://mb-api.abuse.ch/api/v1/ | \
+            python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    if data.get('query_status') == 'ok':
+        for item in data.get('data', []):
+            h = item.get('md5_hash', '').strip()
+            if len(h) == 32:
+                print(h)
+    else:
+        print('# ERROR: ' + str(data.get('query_status')))
+except Exception as e:
+    print('# PARSE ERROR: ' + str(e))
+"
           } > malware-blocklist.txt
-          COUNT=$(grep -c '^[a-fA-F0-9]' malware-blocklist.txt || echo 0)
+
+          COUNT=$(grep -cE '^[a-fA-F0-9]{32}$' malware-blocklist.txt || echo 0)
           echo "Total hashes downloaded: $COUNT"
           if [ "$COUNT" -eq 0 ]; then
-            echo "WARNING: No hashes downloaded - check abuse.ch connectivity"
+            echo "ERROR: No hashes downloaded!"
+            exit 1
           fi
 
       - name: Commit and push updated list
