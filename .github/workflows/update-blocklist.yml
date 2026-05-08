@@ -14,26 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build blocklist
+      - name: Download hashes
         run: |
-          echo "# FortiGate External Malware Block List" > malware-blocklist.txt
-          echo "# Source: abuse.ch MalwareBazaar" >> malware-blocklist.txt
-          echo "# Updated: $(date -u)" >> malware-blocklist.txt
-          echo "" >> malware-blocklist.txt
           curl -s -X POST https://mb-api.abuse.ch/api/v1/ \
             -d "query=get_recent&selector=time" \
             -o response.json
-          python3 -c "
-import json
-with open('response.json') as f:
-    data = json.load(f)
-if data.get('query_status') == 'ok':
-    with open('malware-blocklist.txt', 'a') as out:
-        for item in data.get('data', []):
-            h = item.get('md5_hash','').strip()
-            if len(h) == 32:
-                out.write(h + '\n')
-"
+          python3 parse_hashes.py
           wc -l malware-blocklist.txt
 
       - name: Commit changes
