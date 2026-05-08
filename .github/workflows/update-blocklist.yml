@@ -2,31 +2,40 @@ name: Update Malware Block List
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Runs every 6 hours automatically
-  workflow_dispatch:         # Allows manual trigger anytime
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   update-blocklist:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Download abuse.ch MD5 hashes
         run: |
-          echo "# ============================================" > malware-blocklist.txt
-          echo "# FortiGate External Malware Block List" >> malware-blocklist.txt
-          echo "# Source: abuse.ch MalwareBazaar" >> malware-blocklist.txt
-          echo "# Maintained by: Harpreet2323" >> malware-blocklist.txt
-          echo "# Updated: $(date -u '+%Y-%m-%d %H:%M UTC')" >> malware-blocklist.txt
-          echo "# ============================================" >> malware-blocklist.txt
-          echo "" >> malware-blocklist.txt
-          
-          curl -s https://bazaar.abuse.ch/export/txt/md5/recent/ | \
-          grep -E '^[a-fA-F0-9]{32}$' >> malware-blocklist.txt
-          
-          echo "Total hashes: $(grep -c '^[a-fA-F0-9]' malware-blocklist.txt)"
+          {
+            echo "# ============================================"
+            echo "# FortiGate External Malware Block List"
+            echo "# Source: abuse.ch MalwareBazaar"
+            echo "# Maintained by: Harpreet2323"
+            echo "# Updated: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "# ============================================"
+            echo ""
+            curl -s --max-time 30 https://bazaar.abuse.ch/export/txt/md5/recent/ | \
+            grep -E '^[a-fA-F0-9]{32}$' || true
+          } > malware-blocklist.txt
+          COUNT=$(grep -c '^[a-fA-F0-9]' malware-blocklist.txt || echo 0)
+          echo "Total hashes downloaded: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "WARNING: No hashes downloaded - check abuse.ch connectivity"
+          fi
 
       - name: Commit and push updated list
         run: |
