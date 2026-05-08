@@ -5,7 +5,7 @@ from datetime import datetime
 with open('response.json') as f:
     data = json.load(f)
 
-# Write blocklist file
+# Write everything in one go
 with open('malware-blocklist.txt', 'w') as out:
     out.write('# ============================================\n')
     out.write('# FortiGate External Malware Block List\n')
@@ -17,12 +17,12 @@ with open('malware-blocklist.txt', 'w') as out:
 
     if data.get('query_status') == 'ok':
         count = 0
-        with open('malware-blocklist.txt', 'a') as out:
-            for item in data.get('data', []):
-                h = item.get('md5_hash', '').strip()
-                if len(h) == 32:
-                    out.write(h + '\n')
-                    count += 1
+        for item in data.get('data', []):
+            h = item.get('md5_hash', '').strip()
+            if len(h) == 32:
+                out.write(h + '\n')
+                count += 1
         print(f'Successfully written {count} hashes')
     else:
         print(f'API Error: {data.get("query_status")}')
+        print(f'Full response: {data}')
